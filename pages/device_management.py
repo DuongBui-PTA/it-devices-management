@@ -456,7 +456,7 @@ def show_device_form_popup(mode='add', device=None):
         with col2:
             name = st.text_input("Tên thiết bị *", value=device.get('device_name', '') if device else "")
         with col3:
-            serial = st.text_input("Số serial *", value=device.get('serial_number', '') if device else "")
+            serial = st.text_input("Số serial", value=device.get('serial_number', '') if device else "")
 
         col_nsx, col_ncc = st.columns(2)
         with col_nsx:
@@ -526,8 +526,8 @@ def show_device_form_popup(mode='add', device=None):
                 payload_new_cat = {
                     "code": new_cat_code, 
                     "name": new_cat_name, 
-                    "allocation_type": new_cat_alloc,     # <--- Giá trị mới từ giao diện
-                    "technical_function": new_cat_tech,   # <--- Giá trị mới từ giao diện
+                    "allocation_type": new_cat_alloc,
+                    "technical_function": new_cat_tech,
                     "note": new_cat_notes
                 }
                 
@@ -543,7 +543,7 @@ def show_device_form_popup(mode='add', device=None):
                 final_cat_id = cat_map.get(selected_cat_name)
 
             # --- KIỂM TRA THÔNG TIN THIẾT BỊ ---
-            if not code or not name or not serial:
+            if not code or not name:
                 st.error("⚠️ Vui lòng điền các trường bắt buộc (*)")
                 st.stop()
             if not comp_map.get(manufacturer) or not comp_map.get(supplier):
