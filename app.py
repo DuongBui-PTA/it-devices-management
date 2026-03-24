@@ -159,11 +159,11 @@ def main_app():
         
         if pending_tickets:
             df_tickets = pd.DataFrame(pending_tickets)
-            df_tickets['Thiết bị'] = df_tickets['device_code']
-            df_tickets['Ngày tạo'] = pd.to_datetime(df_tickets['created_at']).dt.strftime('%d/%m')
+            df_tickets['Thiết bị'] = df_tickets['device_name']
+            df_tickets['Ngày tạo'] = pd.to_datetime(df_tickets['created_at']).dt.strftime('%d/%m/%Y')
             
             display_tickets = df_tickets[['Thiết bị', 'title', 'priority', 'status', 'Ngày tạo']]
-            display_tickets.columns = ['Mã TB', 'Sự cố', 'Ưu tiên', 'Trạng thái', 'Ngày']
+            display_tickets.columns = ['Thiết bị', 'Sự cố', 'Ưu tiên', 'Trạng thái', 'Ngày']
             
             st.dataframe(display_tickets, use_container_width=True, hide_index=True)
         else:
