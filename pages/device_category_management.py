@@ -197,9 +197,10 @@ def type_confirm_delete_popup(type_obj: dict):
             st.rerun()
 
 # =========================
-# Form area (Add/Edit)
+# Form area (Add/Edit) - SỬA THÀNH POPUP
 # =========================
-def show_type_form(mode="add", type_obj=None):
+@st.dialog("📝 Cập nhật Loại thiết bị", width="medium")
+def show_type_form_popup(mode="add", type_obj=None):
     st.subheader("➕ Thêm loại thiết bị" if mode == "add" else "✏️ Chỉnh sửa loại thiết bị")
 
     with st.form(key="type_form"):
@@ -211,8 +212,8 @@ def show_type_form(mode="add", type_obj=None):
             note = st.text_area("Ghi chú (tùy chọn)", value=(type_obj.get("note") if type_obj else ""), height=90)
 
         c1, c2 = st.columns(2)
-        submitted = c1.form_submit_button("💾 Lưu", type="primary", width='stretch')
-        cancelled = c2.form_submit_button("❌ Hủy", width='stretch')
+        submitted = c1.form_submit_button("💾 Lưu", type="primary", use_container_width=True)
+        cancelled = c2.form_submit_button("❌ Hủy", use_container_width=True)
 
         if submitted:
             code_clean = normalize(code)
@@ -229,7 +230,9 @@ def show_type_form(mode="add", type_obj=None):
                 if name_exists(name_clean):
                     st.error("⚠️ Tên loại thiết bị đã tồn tại.")
                     st.stop()
+                
                 add_type(code_clean, name_clean, note)
+                st.rerun()
 
             else:
                 tid = type_obj.get("id")
@@ -239,19 +242,17 @@ def show_type_form(mode="add", type_obj=None):
                 if name_exists(name_clean, exclude_id=tid):
                     st.error("⚠️ Tên loại thiết bị đã tồn tại.")
                     st.stop()
+                
                 update_type(tid, code_clean, name_clean, note)
+                st.rerun()
 
         if cancelled:
-            st.session_state.type_show_form = False
-            st.session_state.selected_type_id = None
-            st.session_state.type_confirm_delete = None
-            st.session_state.type_show_detail = False
             st.rerun()
 
 # =========================
 # UI
 # =========================
-st.title("Device Type Management")
+st.title("💻 Quản lý loại thiết bị")
 st.markdown("---")
 
 # ---------- Filters ----------
@@ -306,28 +307,8 @@ bar1, bar2 = st.columns([10, 1.2])
 with bar1:
     st.subheader(f"📋 Danh sách loại thiết bị ({len(filtered_types)} loại)")
 with bar2:
-    if st.button("➕ Thêm loại", type="primary", width='stretch'):
-        st.session_state.type_show_form = True
-        st.session_state.type_form_mode = "add"
-        st.session_state.selected_type_id = None
-        st.session_state.type_confirm_delete = None
-        st.session_state.type_show_detail = False
-        st.rerun()
-
-# Form area
-if st.session_state.type_show_form:
-    st.markdown("---")
-    if st.session_state.type_form_mode == "add":
-        show_type_form("add")
-    else:
-        t = get_type_by_id(st.session_state.selected_type_id)
-        if not t:
-            st.warning("Không tìm thấy loại thiết bị để sửa.")
-            st.session_state.type_show_form = False
-            st.rerun()
-        show_type_form("edit", t)
-
-st.markdown("---")
+    if st.button("➕ Thêm loại", type="primary", use_container_width=True):
+        show_type_form_popup("add")
 
 # Render Bảng bằng DataFrame
 if not filtered_types:
@@ -382,13 +363,8 @@ else:
         if a1.button("👁️ Xem chi tiết", type="primary", width='stretch'):
             type_detail_popup(t_obj)
 
-        if a2.button("✏️ Sửa", width='stretch'):
-            st.session_state.type_show_form = True
-            st.session_state.type_form_mode = "edit"
-            st.session_state.selected_type_id = tid
-            st.session_state.type_confirm_delete = None
-            st.session_state.type_show_detail = False
-            st.rerun()
+        if a2.button("✏️ Sửa", use_container_width=True):
+            show_type_form_popup("edit", t_obj)
 
         # Nút xóa tự động bị khóa nếu đang có thiết bị sử dụng
         if a3.button("🗑️ Xóa", disabled=(used_count > 0), width='stretch'):

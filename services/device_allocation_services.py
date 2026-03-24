@@ -21,6 +21,8 @@ def get_allocations(filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, 
                 d.device_code,
                 d.device_name,
                 da.employee_id,
+                da.department_id,
+                dep.name AS department_name,
                 CONCAT(IFNULL(e.last_name, ''), ' ', IFNULL(e.first_name, '')) AS employee_name,
                 e.email AS employee_email,
                 da.allocated_by_employee_id,
@@ -33,6 +35,7 @@ def get_allocations(filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, 
             JOIN devices d ON da.device_id = d.id
             -- ĐỔI JOIN THÀNH LEFT JOIN Ở DÒNG DƯỚI NÀY:
             LEFT JOIN employees e ON da.employee_id = e.id AND e.delete_flag = b'0'
+            LEFT JOIN departments dep ON da.department_id = dep.id AND dep.delete_flag = b'0'
             LEFT JOIN employees a ON da.allocated_by_employee_id = a.id
             WHERE 1=1
               AND (:status IS NULL OR da.status = :status)
@@ -64,7 +67,8 @@ def allocate_device(data: Dict[str, Any]) -> bool:
         insert_alloc = text("""
             INSERT INTO device_allocations (
                 device_id, 
-                employee_id, 
+                employee_id,
+                department_id,
                 allocated_by_employee_id, 
                 allocation_date, 
                 status, 
@@ -73,6 +77,7 @@ def allocate_device(data: Dict[str, Any]) -> bool:
             VALUES (
                 :device_id, 
                 :employee_id, 
+                :department_id,
                 :allocated_by_employee_id, 
                 :allocation_date, 
                 'Đang cấp phát', 
@@ -95,6 +100,7 @@ def allocate_device(data: Dict[str, Any]) -> bool:
             conn.execute(insert_alloc, {
                 "device_id": data["device_id"],
                 "employee_id": data["employee_id"],
+                "department_id": data.get("department_id"),
                 "allocated_by_employee_id": data.get("allocated_by_employee_id"),
                 "allocation_date": data.get("allocation_date", date.today()),
                 "notes": data.get("notes", "")

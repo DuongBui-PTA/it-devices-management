@@ -81,12 +81,18 @@ for d in raw_devices:
     alloc = alloc_map.get(d['id'])
     if alloc:
         d_enriched['current_employee_id'] = alloc['employee_id']
+        d_enriched['current_department_id'] = alloc.get('department_id')
         d_enriched['current_allocation_id'] = alloc['id']
         
         if alloc['employee_id']:
+            # CẤP PHÁT CHO CÁ NHÂN
             emp = emp_map.get(alloc['employee_id'])
             user_name = emp['full_name'] if emp else alloc['employee_name']
-            dept_name = emp['department_name'] if emp else "Khác"
+            dept_name = emp['department_name'] if emp and emp.get('department_name') else "—"
+        elif alloc.get('department_id'):
+            # CẤP PHÁT CHO PHÒNG BAN
+            user_name = "🏢 Dùng chung"
+            dept_name = alloc['department_name']
         else:
             user_name = "—"
             dept_name = "—"
@@ -95,6 +101,7 @@ for d in raw_devices:
         d_enriched['current_department'] = dept_name
     else:
         d_enriched['current_employee_id'] = None
+        d_enriched['current_department_id'] = None
         d_enriched['current_user_name'] = ""
         d_enriched['current_allocation_id'] = None
         d_enriched['current_department'] = ""
@@ -199,12 +206,12 @@ def show_detail_popup(device: dict):
             
         # Hiển thị Ảnh thiết bị theo cột
         if images_to_show:
-            st.write("📸 **Ảnh thiết bị:**")
-            img_cols = st.columns(len(images_to_show))
-            for idx, img_key in enumerate(images_to_show):
-                img_url = s3_manager.get_presigned_url(img_key)
-                if img_url:
-                    img_cols[idx].image(img_url, width='stretch')
+            with st.expander(f"📸 Xem ảnh thiết bị ({len(images_to_show)} ảnh)", expanded=False):
+                img_cols = st.columns(len(images_to_show))
+                for idx, img_key in enumerate(images_to_show):
+                    img_url = s3_manager.get_presigned_url(img_key)
+                    if img_url:
+                        img_cols[idx].image(img_url, width='stretch')
         else:
             st.info("Không có ảnh thiết bị")
 
@@ -255,59 +262,105 @@ def confirm_delete_popup(device: dict):
 
 @st.dialog("👤 Cấp phát / Thu hồi", width="medium") 
 def assign_popup(device: dict):
-    has_owner = bool(device.get("current_user_name"))
+    # Kiểm tra xem thiết bị có đang được cấp phát hay không
+    has_owner = bool(device.get("current_allocation_id"))
     mode = st.radio("Chế độ", ["Cấp phát", "Thu hồi"], horizontal=True)
 
     if mode == "Thu hồi" and not has_owner:
         st.warning("Thiết bị chưa được cấp phát cho ai nên không thể thu hồi.")
-        if st.button("❌ Đóng", width='stretch'):
+        if st.button("❌ Đóng", use_container_width=True):
             st.rerun()
         st.stop()
 
     if mode == "Cấp phát":
-        emp_options = {"(Trống)": None} 
+        # --- 1. LẤY TRẠNG THÁI HIỆN TẠI ĐỂ GÁN MẶC ĐỊNH ---
+        current_emp_id = device.get("current_employee_id")
+        current_dept_id = device.get("current_department_id")
+        logged_in_emp_id = st.session_state.get("employee_id")
+        
+        # Nếu đang cấp cho phòng ban thì mặc định chọn radio "Phòng ban"
+        default_radio_idx = 1 if current_dept_id and not current_emp_id else 0
+        alloc_type = st.radio("Cấp phát cho:", ["Cá nhân", "Phòng ban (Dùng chung)"], index=default_radio_idx, horizontal=True)
+        
+        # --- 2. TẠO DANH SÁCH OPTIONS ---
+        # Load danh sách Nhân sự
+        emp_options = {"(Chọn nhân sự)": None} 
         for e in all_employees:
             emp_options[e["full_name"]] = e["id"]
-            
         emp_names = list(emp_options.keys())
         
-        current_user = device.get("current_user_name")
-        default_index = emp_names.index(current_user) if current_user in emp_names else 0
+        # Load danh sách Phòng ban
+        dept_options = {"(Chọn phòng ban)": None}
+        for d in all_depts:
+            dept_options[d["name"]] = d["id"]
+        dept_names = list(dept_options.keys())
         
-        logged_in_emp_id = st.session_state.get("employee_id")
-        allocator_default_idx = 0 
-        if logged_in_emp_id is not None:
-            for idx, emp_id in enumerate(emp_options.values()):
-                if emp_id == logged_in_emp_id:
-                    allocator_default_idx = idx
-                    break
+        # --- 3. TÍNH TOÁN VỊ TRÍ (INDEX) MẶC ĐỊNH CHO CÁC DROPDOWN ---
+        # 3.1. Người sử dụng mặc định (người đang giữ thiết bị)
+        default_user_idx = 0
+        if current_emp_id:
+            curr_user_name = next((name for name, eid in emp_options.items() if eid == current_emp_id), None)
+            if curr_user_name in emp_names:
+                default_user_idx = emp_names.index(curr_user_name)
+
+        # 3.2. Phòng ban mặc định (phòng đang giữ thiết bị)
+        default_dept_idx = 0
+        if current_dept_id:
+            curr_dept_name = next((name for name, did in dept_options.items() if did == current_dept_id), None)
+            if curr_dept_name in dept_names:
+                default_dept_idx = dept_names.index(curr_dept_name)
+                
+        # 3.3. Người thực hiện cấp phát mặc định (Tài khoản đang đăng nhập)
+        allocator_options = [name for name in emp_names if name != "(Chọn nhân sự)"]
+        allocator_default_idx = 0
+        if logged_in_emp_id:
+            logged_in_name = next((name for name, eid in emp_options.items() if eid == logged_in_emp_id), None)
+            if logged_in_name in allocator_options:
+                allocator_default_idx = allocator_options.index(logged_in_name)
         
-        selected_name = st.selectbox("Chọn người sử dụng *", options=emp_names, index=default_index)
-        allocated_by_name = st.selectbox("Người thực hiện cấp phát *", options=emp_names, index=allocator_default_idx)
+        # --- 4. HIỂN THỊ UI ---
+        selected_name = "(Chọn nhân sự)"
+        selected_dept = "(Chọn phòng ban)"
+        
+        if alloc_type == "Cá nhân":
+            selected_name = st.selectbox("Người sử dụng *", options=emp_names, index=default_user_idx)
+        else:
+            selected_dept = st.selectbox("Phòng ban nhận *", options=dept_names, index=default_dept_idx)
+
+        allocated_by_name = st.selectbox("Người thực hiện cấp phát *", options=allocator_options, index=allocator_default_idx)
         
         assigned_dt = st.date_input("Ngày cấp phát", value=date.today())
         note = st.text_area("Ghi chú (tùy chọn)", height=80)
 
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("✅ Xác nhận cấp phát", type="primary", width='stretch'):
+            if st.button("✅ Xác nhận cấp phát", type="primary", use_container_width=True):
                 
-                if selected_name == "(Trống)":
-                    st.error("⚠️ Vui lòng chọn Người sử dụng thiết bị!")
-                    st.stop()
-                if allocated_by_name == "(Trống)":
-                    st.error("⚠️ Vui lòng chọn Người thực hiện cấp phát!")
-                    st.stop()
+                user_id_to_save = None
+                dept_id_to_save = None
 
-                user_id_to_save = emp_options[selected_name]
-                alloc_id_to_save = emp_options[allocated_by_name]
+                # VALIDATE DỮ LIỆU
+                if alloc_type == "Cá nhân":
+                    if selected_name == "(Chọn nhân sự)":
+                        st.error("⚠️ Vui lòng chọn Người sử dụng thiết bị!")
+                        st.stop()
+                    user_id_to_save = emp_options[selected_name]
+                else:
+                    if selected_dept == "(Chọn phòng ban)":
+                        st.error("⚠️ Vui lòng chọn Phòng ban nhận thiết bị!")
+                        st.stop()
+                    dept_id_to_save = dept_options[selected_dept]
+
+                alloc_id_to_save = emp_options.get(allocated_by_name)
 
                 if has_owner and device.get("current_allocation_id"):
                     return_device(device["current_allocation_id"], device["id"], assigned_dt, "Tự động thu hồi do cấp phát mới.")
                 
+                # GÓI PAYLOAD GỬI XUỐNG SERVICE
                 alloc_data = {
                     "device_id": device["id"],
                     "employee_id": user_id_to_save,
+                    "department_id": dept_id_to_save,
                     "allocated_by_employee_id": alloc_id_to_save,
                     "allocation_date": assigned_dt,
                     "notes": note.strip()
@@ -318,28 +371,30 @@ def assign_popup(device: dict):
                     if "dm_data_loaded" in st.session_state: del st.session_state["dm_data_loaded"]
                     st.rerun()
         with c2:
-            if st.button("❌ Hủy", width='stretch'):
+            if st.button("❌ Hủy", use_container_width=True):
                 st.rerun()
     else:
+        # Code phần Thu hồi giữ nguyên...
         st.warning("Thu hồi sẽ chuyển trạng thái thiết bị về **Chưa sử dụng**.")
         st.markdown(f"**Đang cấp phát cho:** {device['current_user_name']}")
 
         returned_dt = st.date_input("Ngày thu hồi", value=date.today())
-        note = st.text_area("Ghi chú (tùy chọn)", height=80)
+        note = st.text_area("Ghi chú thu hồi (tùy chọn)", height=80)
 
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("🧾 Xác nhận thu hồi", type="primary", width='stretch'):
+            if st.button("🧾 Xác nhận thu hồi", type="primary", use_container_width=True):
                 if return_device(device["current_allocation_id"], device["id"], returned_dt, note):
                     st.success("✅ Thu hồi thành công!")
                     if "dm_data_loaded" in st.session_state: del st.session_state["dm_data_loaded"]
                     st.rerun()
         with c2:
-            if st.button("❌ Hủy", width='stretch'):
+            if st.button("❌ Hủy", use_container_width=True):
                 st.rerun()
 
 # ---------- Form Thêm / Sửa Thiết Bị ----------
-def show_device_form(mode='add', device=None):
+@st.dialog("💻 Thông tin Thiết bị", width="large")
+def show_device_form_popup(mode='add', device=None):
     cat_names = list(cat_map.keys())
     if not cat_names: cat_names = ["(Chưa có loại thiết bị)"]
     cat_names.append("Khác (Thêm mới...)")
@@ -356,12 +411,19 @@ def show_device_form(mode='add', device=None):
     default_idx = cat_names.index(default_cat) if default_cat in cat_names else 0
     type_key = f"cat_select_{mode}_{device['id'] if device else 'new'}"
 
-    # Bắt sự kiện chọn "Thêm mới..."
-    def handle_type_change():
-        if st.session_state[type_key] == "Khác (Thêm mới...)":
-            add_device_type_popup()
+    selected_cat_name = st.selectbox("Loại thiết bị *", options=cat_names, index=default_idx, key=type_key)
 
-    selected_cat_name = st.selectbox("Loại thiết bị *", options=cat_names, index=default_idx, key=type_key, on_change=handle_type_change)
+    new_cat_code = ""
+    new_cat_name = ""
+    new_cat_notes = ""
+    if selected_cat_name == "Khác (Thêm mới...)":
+        st.info("💡 Bạn đang chọn tạo Loại thiết bị mới. Vui lòng nhập thông tin bên dưới:")
+        c_new1, c_new2 = st.columns(2)
+        with c_new1: 
+            new_cat_code = st.text_input("Mã loại thiết bị mới *", key=f"new_cat_code_{mode}")
+        with c_new2: 
+            new_cat_name = st.text_input("Tên loại thiết bị mới *", key=f"new_cat_name_{mode}")
+        new_cat_notes = st.text_input("Ghi chú loại thiết bị mới", key=f"new_cat_notes_{mode}")
 
     with st.form(key='device_form'):
         col1, col2, col3 = st.columns(3)
@@ -426,10 +488,29 @@ def show_device_form(mode='add', device=None):
         purchase_invoice = st.file_uploader("Upload hóa đơn (Tùy chọn)", type=["pdf", "jpg", "png", "jpeg"])
 
         col_submit, col_cancel = st.columns(2)
-        submitted = col_submit.form_submit_button("💾 Lưu", type="primary", width='stretch')
-        cancelled = col_cancel.form_submit_button("❌ Hủy", type="secondary", width='stretch')
+        submitted = col_submit.form_submit_button("💾 Lưu", type="primary", use_container_width=True)
+        cancelled = col_cancel.form_submit_button("❌ Hủy", type="secondary", use_container_width=True)
 
         if submitted:
+            # --- XỬ LÝ LOẠI THIẾT BỊ TRƯỚC ---
+            final_cat_id = None
+            if selected_cat_name == "Khác (Thêm mới...)":
+                if not new_cat_code or not new_cat_name:
+                    st.error("⚠️ Vui lòng nhập đầy đủ Mã và Tên cho Loại thiết bị mới ở phía trên.")
+                    st.stop()
+                
+                # Gọi service tạo Danh mục mới
+                if not create_device_category({"code": new_cat_code, "name": new_cat_name, "note": new_cat_notes}):
+                    st.stop() # Dừng lại nếu trùng mã hoặc có lỗi
+                
+                # Cập nhật lại cache và lấy ID của loại thiết bị vừa tạo
+                load_management_data()
+                updated_cat_map = {c['category_name']: c['category_id'] for c in st.session_state.all_categories}
+                final_cat_id = updated_cat_map.get(new_cat_name)
+            else:
+                final_cat_id = cat_map.get(selected_cat_name)
+
+            # --- KIỂM TRA THÔNG TIN THIẾT BỊ ---
             if not code or not name or not serial:
                 st.error("⚠️ Vui lòng điền các trường bắt buộc (*)")
                 st.stop()
@@ -440,7 +521,7 @@ def show_device_form(mode='add', device=None):
             device_data = {
                 'device_code': code,
                 'device_name': name,
-                'category_id': cat_map.get(selected_cat_name),
+                'category_id': final_cat_id,
                 'serial_number': serial,
                 'purchase_date': purchase_date.strftime('%Y-%m-%d'),
                 'warranty_date': warranty_date.strftime('%Y-%m-%d'),
@@ -462,18 +543,14 @@ def show_device_form(mode='add', device=None):
                 if create_device(device_data):
                     st.success("✅ Thêm thành công!")
                     if "dm_data_loaded" in st.session_state: del st.session_state["dm_data_loaded"]
-                    st.session_state.show_form = False
                     st.rerun()
             else:
                 if update_device(device['id'], device_data):
                     st.success("✅ Cập nhật thành công!")
                     if "dm_data_loaded" in st.session_state: del st.session_state["dm_data_loaded"]
-                    st.session_state.show_form = False
                     st.rerun()
 
         if cancelled:
-            st.session_state.show_form = False
-            st.session_state.selected_device = None
             st.rerun()
 
 # ---------- Main View ----------
@@ -511,15 +588,8 @@ bar1, bar2 = st.columns([10, 1.2])
 with bar1:
     st.subheader(f"📋 Danh Sách Thiết Bị ({len(filtered_devices)} thiết bị)")
 with bar2:
-    if st.button("➕ Thêm Mới", type="primary", width='stretch'):
-        st.session_state.show_form = True
-        st.session_state.form_mode = 'add'
-        st.session_state.selected_device = None
-        st.rerun()
-
-if st.session_state.show_form:
-    st.markdown("---")
-    show_device_form(st.session_state.form_mode, st.session_state.selected_device)
+    if st.button("➕ Thêm Mới", type="primary", use_container_width=True):
+        show_device_form_popup('add')
 
 # --- Bảng danh sách ---
 if not filtered_devices:
@@ -563,11 +633,8 @@ else:
         if a1.button("👁️ Xem chi tiết", type="primary", width='stretch'): 
             show_detail_popup(selected_device) 
             
-        if a2.button("✏️ Sửa", width='stretch'):
-            st.session_state.show_form = True
-            st.session_state.form_mode = 'edit'
-            st.session_state.selected_device = selected_device
-            st.rerun()
+        if a2.button("✏️ Sửa", use_container_width=True):
+            show_device_form_popup('edit', selected_device)
             
         if a3.button("👤 Cấp phát/Thu hồi", width='stretch'): 
             assign_popup(selected_device) 

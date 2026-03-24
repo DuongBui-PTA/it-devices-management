@@ -36,8 +36,21 @@ can_update_progress = (user_role == 'ADMIN' or username.lower() == 'duong.bui')
 if "ticket_df_key" not in st.session_state:
     st.session_state.ticket_df_key = 0
 
+# KHỞI TẠO BIẾN SESSION CHO BỘ LỌC
+if "mt_filter_status" not in st.session_state:
+    st.session_state.mt_filter_status = []
+if "mt_filter_priority" not in st.session_state:
+    st.session_state.mt_filter_priority = []
+if "mt_filter_requester" not in st.session_state:
+    st.session_state.mt_filter_requester = []
+
 def clear_ticket_selection():
     st.session_state.ticket_df_key += 1
+
+def clear_mt_filters():
+    st.session_state.mt_filter_status = []
+    st.session_state.mt_filter_priority = []
+    st.session_state.mt_filter_requester = []
 
 # ---------- FETCH DATA ----------
 records = get_maintenance_records(filters)
@@ -137,12 +150,12 @@ def ticket_detail_popup(ticket: dict):
     images_to_show = [img for img in images_to_show if img] # Lọc các giá trị None
     
     if images_to_show:
-        st.write("📸 **Ảnh đính kèm:**")
-        img_cols = st.columns(len(images_to_show))
-        for idx, img_key in enumerate(images_to_show):
-            img_url = s3_manager.get_presigned_url(img_key)
-            if img_url:
-                img_cols[idx].image(img_url, width='stretch')
+        with st.expander(f"📸 Ảnh đính kèm: ({len(images_to_show)} ảnh)", expanded=False):
+                img_cols = st.columns(len(images_to_show))
+                for idx, img_key in enumerate(images_to_show):
+                    img_url = s3_manager.get_presigned_url(img_key)
+                    if img_url:
+                        img_cols[idx].image(img_url, width='stretch')
 
     st.markdown("---")
     
@@ -195,7 +208,39 @@ def ticket_detail_popup(ticket: dict):
 st.title("🛠️ Quản Lý Bảo Hành & Sửa Chữa")
 st.markdown("---")
 
-col_title, col_btn = st.columns([8, 2], vertical_alignment="bottom")
+st.subheader("🔍 Bộ Lọc")
+
+# Trích xuất các giá trị duy nhất từ dữ liệu gốc để làm options cho bộ lọc
+all_status = sorted(list(set([r['status'] for r in records if r['status']])))
+all_priorities = sorted(list(set([r['priority'] for r in records if r['priority']])))
+all_requesters = sorted(list(set([r['requester_name'] for r in records if r['requester_name']])))
+
+col_f1, col_f2, col_f3, col_f4 = st.columns([2, 2, 2, 1], vertical_alignment="bottom")
+with col_f1: 
+    st.multiselect("Trạng thái", options=all_status, key="mt_filter_status")
+with col_f2: 
+    st.multiselect("Độ ưu tiên", options=all_priorities, key="mt_filter_priority")
+with col_f3: 
+    # Nếu là user thường, dropdown này chỉ có tên của họ. Nếu là Admin, sẽ có tên toàn bộ nv đã tạo phiếu.
+    st.multiselect("Người yêu cầu", options=all_requesters, key="mt_filter_requester")
+with col_f4:
+    st.button("🔄 Xóa bộ lọc", width='stretch', on_click=clear_mt_filters)
+
+# --- 2. ÁP DỤNG LOGIC LỌC DỮ LIỆU ---
+filtered_records = records.copy()
+
+if st.session_state.mt_filter_status: 
+    filtered_records = [r for r in filtered_records if r['status'] in st.session_state.mt_filter_status]
+    
+if st.session_state.mt_filter_priority: 
+    filtered_records = [r for r in filtered_records if r['priority'] in st.session_state.mt_filter_priority]
+    
+if st.session_state.mt_filter_requester: 
+    filtered_records = [r for r in filtered_records if r['requester_name'] in st.session_state.mt_filter_requester]
+
+st.markdown("---")
+
+col_title, col_btn = st.columns([8.5, 1.5], vertical_alignment="bottom")
 with col_title:
     st.subheader(f"📋 Danh sách phiếu yêu cầu ({len(records)} phiếu)")
 with col_btn:
