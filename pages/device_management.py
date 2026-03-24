@@ -220,9 +220,9 @@ def show_detail_popup(device: dict):
     colA, colB = st.columns([1, 1])
     with colA:
         if st.button("✏️ Sửa", width='stretch'):
-            st.session_state.show_form = True
-            st.session_state.form_mode = "edit"
-            st.session_state.selected_device = device
+            # Gán thiết bị cần sửa vào biến Trigger
+            st.session_state.trigger_edit_device = device
+            # Rerun để đóng popup Chi tiết
             st.rerun()
     with colB:
         if st.button("Đóng", type="primary", width='stretch'):
@@ -268,7 +268,7 @@ def assign_popup(device: dict):
 
     if mode == "Thu hồi" and not has_owner:
         st.warning("Thiết bị chưa được cấp phát cho ai nên không thể thu hồi.")
-        if st.button("❌ Đóng", use_container_width=True):
+        if st.button("❌ Đóng", width='stretch'):
             st.rerun()
         st.stop()
 
@@ -334,7 +334,7 @@ def assign_popup(device: dict):
 
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("✅ Xác nhận cấp phát", type="primary", use_container_width=True):
+            if st.button("✅ Xác nhận cấp phát", type="primary", width='stretch'):
                 
                 user_id_to_save = None
                 dept_id_to_save = None
@@ -371,7 +371,7 @@ def assign_popup(device: dict):
                     if "dm_data_loaded" in st.session_state: del st.session_state["dm_data_loaded"]
                     st.rerun()
         with c2:
-            if st.button("❌ Hủy", use_container_width=True):
+            if st.button("❌ Hủy", width='stretch'):
                 st.rerun()
     else:
         # Code phần Thu hồi giữ nguyên...
@@ -383,13 +383,13 @@ def assign_popup(device: dict):
 
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("🧾 Xác nhận thu hồi", type="primary", use_container_width=True):
+            if st.button("🧾 Xác nhận thu hồi", type="primary", width='stretch'):
                 if return_device(device["current_allocation_id"], device["id"], returned_dt, note):
                     st.success("✅ Thu hồi thành công!")
                     if "dm_data_loaded" in st.session_state: del st.session_state["dm_data_loaded"]
                     st.rerun()
         with c2:
-            if st.button("❌ Hủy", use_container_width=True):
+            if st.button("❌ Hủy", width='stretch'):
                 st.rerun()
 
 # ---------- Form Thêm / Sửa Thiết Bị ----------
@@ -416,13 +416,37 @@ def show_device_form_popup(mode='add', device=None):
     new_cat_code = ""
     new_cat_name = ""
     new_cat_notes = ""
+    new_cat_alloc = "Cá nhân"
+    new_cat_tech = "Thiết bị người dùng cuối (Laptop, PC...)"
     if selected_cat_name == "Khác (Thêm mới...)":
         st.info("💡 Bạn đang chọn tạo Loại thiết bị mới. Vui lòng nhập thông tin bên dưới:")
+        # Hàng 1: Mã và Tên
         c_new1, c_new2 = st.columns(2)
         with c_new1: 
             new_cat_code = st.text_input("Mã loại thiết bị mới *", key=f"new_cat_code_{mode}")
         with c_new2: 
             new_cat_name = st.text_input("Tên loại thiết bị mới *", key=f"new_cat_name_{mode}")
+            
+        # Hàng 2: Phân loại cấp phát và Chức năng kỹ thuật
+        c_new3, c_new4 = st.columns(2)
+        
+        # Danh sách tùy chọn giống hệt bên trang device_category_management
+        alloc_options = ['Cá nhân', 'Phòng ban/Dùng chung', 'Vật tư tiêu hao']
+        tech_options = [
+            'Thiết bị người dùng cuối (Laptop, PC...)', 
+            'Thiết bị ngoại vi (Màn hình, Chuột...)', 
+            'Thiết bị mạng (Router, Switch...)', 
+            'Thiết bị văn phòng (Máy in, Scanner...)', 
+            'Hạ tầng & Máy chủ (Server, UPS...)',
+            'Khác'
+        ]
+        
+        with c_new3:
+            new_cat_alloc = st.selectbox("Nghiệp vụ cấp phát", options=alloc_options, key=f"new_cat_alloc_{mode}")
+        with c_new4:
+            new_cat_tech = st.selectbox("Chức năng kỹ thuật", options=tech_options, key=f"new_cat_tech_{mode}")
+
+        # Hàng 3: Ghi chú
         new_cat_notes = st.text_input("Ghi chú loại thiết bị mới", key=f"new_cat_notes_{mode}")
 
     with st.form(key='device_form'):
@@ -488,8 +512,8 @@ def show_device_form_popup(mode='add', device=None):
         purchase_invoice = st.file_uploader("Upload hóa đơn (Tùy chọn)", type=["pdf", "jpg", "png", "jpeg"])
 
         col_submit, col_cancel = st.columns(2)
-        submitted = col_submit.form_submit_button("💾 Lưu", type="primary", use_container_width=True)
-        cancelled = col_cancel.form_submit_button("❌ Hủy", type="secondary", use_container_width=True)
+        submitted = col_submit.form_submit_button("💾 Lưu", type="primary", width='stretch')
+        cancelled = col_cancel.form_submit_button("❌ Hủy", type="secondary", width='stretch')
 
         if submitted:
             # --- XỬ LÝ LOẠI THIẾT BỊ TRƯỚC ---
@@ -498,10 +522,18 @@ def show_device_form_popup(mode='add', device=None):
                 if not new_cat_code or not new_cat_name:
                     st.error("⚠️ Vui lòng nhập đầy đủ Mã và Tên cho Loại thiết bị mới ở phía trên.")
                     st.stop()
+
+                payload_new_cat = {
+                    "code": new_cat_code, 
+                    "name": new_cat_name, 
+                    "allocation_type": new_cat_alloc,     # <--- Giá trị mới từ giao diện
+                    "technical_function": new_cat_tech,   # <--- Giá trị mới từ giao diện
+                    "note": new_cat_notes
+                }
                 
                 # Gọi service tạo Danh mục mới
-                if not create_device_category({"code": new_cat_code, "name": new_cat_name, "note": new_cat_notes}):
-                    st.stop() # Dừng lại nếu trùng mã hoặc có lỗi
+                if not create_device_category(payload_new_cat):
+                    st.stop()
                 
                 # Cập nhật lại cache và lấy ID của loại thiết bị vừa tạo
                 load_management_data()
@@ -588,7 +620,7 @@ bar1, bar2 = st.columns([10, 1.2])
 with bar1:
     st.subheader(f"📋 Danh Sách Thiết Bị ({len(filtered_devices)} thiết bị)")
 with bar2:
-    if st.button("➕ Thêm Mới", type="primary", use_container_width=True):
+    if st.button("➕ Thêm Mới", type="primary", width='stretch'):
         show_device_form_popup('add')
 
 # --- Bảng danh sách ---
@@ -604,6 +636,14 @@ else:
     
     # Xử lý các giá trị None/NaN để bảng không hiển thị lỗi
     display_df.fillna("—", inplace=True)
+
+    # BẮT TRIGGER ĐỂ MỞ POPUP SỬA TỪ BÊN NGOÀI
+    if st.session_state.get("trigger_edit_device"):
+        d_obj = st.session_state.trigger_edit_device
+        # Xóa biến trigger ngay lập tức
+        st.session_state.trigger_edit_device = None
+        # Mở popup Sửa
+        show_device_form_popup('edit', d_obj)
 
     st.write("👉 **Nhấn vào một dòng bất kỳ trong bảng để xem các thao tác (Xem, Sửa, Cấp phát, Xóa).**")
 
@@ -633,7 +673,7 @@ else:
         if a1.button("👁️ Xem chi tiết", type="primary", width='stretch'): 
             show_detail_popup(selected_device) 
             
-        if a2.button("✏️ Sửa", use_container_width=True):
+        if a2.button("✏️ Sửa", width='stretch'):
             show_device_form_popup('edit', selected_device)
             
         if a3.button("👤 Cấp phát/Thu hồi", width='stretch'): 

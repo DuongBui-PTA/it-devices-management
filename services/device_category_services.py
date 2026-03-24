@@ -26,6 +26,8 @@ def get_device_categories(include_deleted: bool = False) -> List[Dict[str, Any]]
                 id,
                 category_code,
                 category_name,
+                allocation_type,
+                technical_function,
                 CAST(delete_flag AS UNSIGNED) AS is_deleted,
                 notes
             FROM device_categories
@@ -43,7 +45,9 @@ def get_device_categories(include_deleted: bool = False) -> List[Dict[str, Any]]
                 "category_id": r.id,
                 "category_code": r.category_code,
                 "category_name": r.category_name,
-                "delete_flag": bool(r.is_deleted), # Đổi sang boolean
+                "allocation_type": r.allocation_type,
+                "technical_function": r.technical_function,
+                "delete_flag": bool(r.is_deleted),
                 "notes": r.notes
             }
             for r in results
@@ -58,14 +62,16 @@ def create_device_category(data: Dict[str, Any]) -> bool:
         engine = get_db_engine()
 
         query = text("""
-            INSERT INTO device_categories (category_code, category_name, notes)
-            VALUES (:code, :name, :notes)
+            INSERT INTO device_categories (category_code, category_name, allocation_type, technical_function, notes)
+            VALUES (:code, :name, :allocation_type, :technical_function, :notes)
         """)
 
         with engine.begin() as conn:
             conn.execute(query, {
                 "code": data["code"],
                 "name": data["name"],
+                "allocation_type": data.get("allocation_type", "Cá nhân"),
+                "technical_function": data.get("technical_function", ""),
                 "notes": data.get("note", "")
             })
         return True
@@ -86,6 +92,8 @@ def update_device_category(category_id: int, data: Dict[str, Any]) -> bool:
             UPDATE device_categories
             SET category_code = :code,
                 category_name = :name,
+                allocation_type = :allocation_type,
+                technical_function = :technical_function,
                 notes = :notes
             WHERE id = :id
         """)
@@ -95,6 +103,8 @@ def update_device_category(category_id: int, data: Dict[str, Any]) -> bool:
                 "id": category_id,
                 "code": data["code"],
                 "name": data["name"],
+                "allocation_type": data.get("allocation_type", "Cá nhân"),
+                "technical_function": data.get("technical_function", ""),
                 "notes": data.get("note", "")
             })
 
