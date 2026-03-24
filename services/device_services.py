@@ -164,6 +164,10 @@ def create_device(data: Dict[str, Any]) -> bool:
 
         engine = get_db_engine()
 
+        # Xử lý Serial
+        serial = data.get("serial_number", "").strip()
+        final_serial = serial if serial else None
+
         # --- 3. CÂU LỆNH SQL INSERT ---
         query = text("""
             INSERT INTO devices (
@@ -185,6 +189,7 @@ def create_device(data: Dict[str, Any]) -> bool:
         clean_data = {k: v for k, v in data.items() if k not in clean_keys}
         
         # Gắn các S3 key vừa tạo vào dictionary để map với placeholder trong SQL
+        clean_data['serial_number'] = final_serial
         clean_data['image_url'] = image_urls[0]
         clean_data['image_url_2'] = image_urls[1]
         clean_data['image_url_3'] = image_urls[2]
@@ -229,6 +234,11 @@ def update_device(device_id: int, data: Dict[str, Any]) -> bool:
                 invoice_url = inv_key
 
         engine = get_db_engine()
+        
+        # Xử lý Serial
+        serial = data.get("serial_number", "").strip()
+        final_serial = serial if serial else None
+        
         query = text("""
             UPDATE devices
             SET
@@ -257,7 +267,9 @@ def update_device(device_id: int, data: Dict[str, Any]) -> bool:
         clean_keys = ['img_file_1', 'img_file_2', 'img_file_3', 'inv_file']
         clean_data = {k: v for k, v in data.items() if k not in clean_keys}
         
+        # --- GÁN LẠI DỮ LIỆU CHUẨN ĐỂ CHẠY SQL ---
         clean_data['id'] = device_id
+        clean_data['serial_number'] = final_serial
         clean_data['image_url'] = image_urls[0]
         clean_data['image_url_2'] = image_urls[1]
         clean_data['image_url_3'] = image_urls[2]

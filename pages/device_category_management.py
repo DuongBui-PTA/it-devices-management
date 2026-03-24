@@ -153,13 +153,13 @@ def type_detail_popup(type_obj: dict):
 
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("✏️ Sửa", type="primary", use_container_width=True):
+        if st.button("✏️ Sửa", type="primary", width='stretch'):
             # Gán object cần sửa vào biến Trigger
             st.session_state.trigger_edit_category = type_obj
             # Rerun để đóng popup Chi tiết hiện tại
             st.rerun()
     with c2:
-        if st.button("Đóng", use_container_width=True):
+        if st.button("Đóng", width='stretch'):
             st.rerun()
 
 @st.dialog("🗑️ Xác nhận xóa loại thiết bị", width="small")

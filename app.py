@@ -44,9 +44,9 @@ def show_login_form():
             
             c1, c2 = st.columns(2)
             with c1:
-                submit = st.form_submit_button("Đăng nhập", type="primary", use_container_width=True)
+                submit = st.form_submit_button("Đăng nhập", type="primary", width='stretch')
             with c2:
-                st.form_submit_button("Quên mật khẩu?", disabled=True, use_container_width=True, help="Liên hệ IT để reset mật khẩu")
+                st.form_submit_button("Quên mật khẩu?", disabled=True, width='stretch', help="Liên hệ IT để reset mật khẩu")
             
             if submit:
                 if username and password:
@@ -68,7 +68,7 @@ def main_app():
     with col2:
         st.markdown(f"### 👤 Xin chào, **{auth.get_user_display_name()}**")
     with col3:
-        if st.button("🚪 Đăng xuất", use_container_width=True):
+        if st.button("🚪 Đăng xuất", width='stretch'):
             auth.logout()
             st.rerun()
 
@@ -151,7 +151,7 @@ def main_app():
         st.markdown("📊 **Thống kê theo Danh mục**")
         cat_counts = df_devices['Danh mục'].value_counts().reset_index()
         cat_counts.columns = ['Danh mục thiết bị', 'Số lượng']
-        st.dataframe(cat_counts, use_container_width=True, hide_index=True)
+        st.dataframe(cat_counts, width='stretch', hide_index=True)
 
     with c2:
         st.markdown("🛠️ **Phiếu sửa chữa cần xử lý**")
@@ -165,7 +165,7 @@ def main_app():
             display_tickets = df_tickets[['Thiết bị', 'title', 'priority', 'status', 'Ngày tạo']]
             display_tickets.columns = ['Thiết bị', 'Sự cố', 'Ưu tiên', 'Trạng thái', 'Ngày']
             
-            st.dataframe(display_tickets, use_container_width=True, hide_index=True)
+            st.dataframe(display_tickets, width='stretch', hide_index=True)
         else:
             st.success("Không có phiếu sửa chữa nào đang tồn đọng.")
 
@@ -181,7 +181,7 @@ def main_app():
     display_dept_df = dept_df[['Mã TB', 'Tên thiết bị', 'Danh mục', 'Người dùng', 'Loại cấp phát', 'Trạng thái']]
     
     st.markdown(f"**Tổng số:** `{len(dept_df)}` thiết bị")
-    st.dataframe(display_dept_df, use_container_width=True, hide_index=True)
+    st.dataframe(display_dept_df, width='stretch', hide_index=True)
 
 def main():
     if auth.check_session():
