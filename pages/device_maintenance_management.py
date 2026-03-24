@@ -143,7 +143,7 @@ def ticket_detail_popup(ticket: dict):
 
     st.markdown("---")
     st.markdown("**Mô tả sự cố:**")
-    st.info(ticket['problem_description'] or "Không có mô tả chi tiết.")
+    st.warning(ticket['problem_description'] or "Không có mô tả chi tiết.")
 
     # Render Hình ảnh sự cố (nếu có)
     images_to_show = [ticket.get('image_url_1'), ticket.get('image_url_2'), ticket.get('image_url_3')]
