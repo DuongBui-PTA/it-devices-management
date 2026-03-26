@@ -71,6 +71,8 @@ class AuthManager:
                 return False, {"error": "Invalid username or password"}
             
             # Update last login
+            # FIX #9: Dùng engine.begin() nhất quán với toàn bộ codebase
+            # thay vì engine.connect() + conn.commit() thủ công
             try:
                 update_query = text("""
                 UPDATE users 
@@ -78,9 +80,8 @@ class AuthManager:
                 WHERE id = :user_id
                 """)
                 
-                with engine.connect() as conn:
+                with engine.begin() as conn:
                     conn.execute(update_query, {'user_id': user['id']})
-                    conn.commit()
             except Exception as e:
                 logger.warning(f"Could not update last_login: {e}")
             
@@ -170,5 +171,4 @@ class AuthManager:
     def update_session_activity(self):
         """Update session activity to prevent timeout"""
         if 'login_time' in st.session_state:
-            # You could implement activity tracking here if needed
             pass

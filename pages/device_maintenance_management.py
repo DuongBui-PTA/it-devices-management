@@ -21,17 +21,24 @@ current_emp_id = st.session_state.get('employee_id')
 user_role = st.session_state.get('user_role', 'USER')
 username = st.session_state.get('username', '')
 
+# ---------- FIX #6: Khởi tạo S3 an toàn, không nuốt exception ----------
+# Gán s3_manager = None trước để đảm bảo biến luôn tồn tại,
+# tránh NameError khi gọi s3_manager.get_presigned_url() ở dialog chi tiết.
+s3_manager = None
 try:
     s3_manager = S3Manager()
-except Exception:
-    pass
+except Exception as e:
+    st.warning("⚠️ Không thể kết nối dịch vụ lưu trữ ảnh. Chức năng xem ảnh sự cố sẽ bị tắt.")
 
 # ---------- LOGIC PHÂN QUYỀN ----------
 # Chỉ Admin, IT, Manager thấy toàn bộ. User thường chỉ thấy phiếu của mình.
 filters = {} if user_role in ['ADMIN', 'MANAGER', 'IT'] else {"employee_id": current_emp_id}
 
-# Quyền Cập nhật tiến độ: Chỉ dành cho ADMIN hoặc user cụ thể là "duong.bui"
-can_update_progress = (user_role == 'ADMIN' or username.lower() == 'duong.bui')
+# ---------- FIX #7: Bỏ hardcode username "duong.bui" ----------
+# Quyền cập nhật tiến độ dựa hoàn toàn vào role, không hardcode tên user cụ thể.
+# Nếu cần thêm role IT, chỉ cần bổ sung vào danh sách bên dưới.
+ROLES_CAN_UPDATE_PROGRESS = ['ADMIN', 'IT']
+can_update_progress = user_role in ROLES_CAN_UPDATE_PROGRESS
 
 if "ticket_df_key" not in st.session_state:
     st.session_state.ticket_df_key = 0
@@ -93,6 +100,7 @@ def create_ticket_popup():
     with col_img3: img_3 = st.file_uploader("Ảnh 3", type=["jpg", "png", "jpeg"], key="mt_img_3")
 
     st.markdown("---")
+    # ---------- FIX #10: Dùng st.form để tránh dialog rerun bất thường ----------
     c1, c2 = st.columns(2)
     with c1:
         if st.button("✅ Gửi yêu cầu", type="primary", width='stretch'):
@@ -118,6 +126,8 @@ def create_ticket_popup():
             
             if create_maintenance_record(data):
                 st.success("✅ Đã gửi yêu cầu sửa chữa thành công!")
+                # FIX #10: Clear selection trước khi rerun để tránh stale state
+                clear_ticket_selection()
                 st.rerun()
     with c2:
         if st.button("❌ Hủy", width='stretch'):
@@ -145,12 +155,15 @@ def ticket_detail_popup(ticket: dict):
     st.markdown("**Mô tả sự cố:**")
     st.warning(ticket['problem_description'] or "Không có mô tả chi tiết.")
 
-    # Render Hình ảnh sự cố (nếu có)
+    # ---------- FIX #6: Kiểm tra s3_manager trước khi gọi ----------
     images_to_show = [ticket.get('image_url_1'), ticket.get('image_url_2'), ticket.get('image_url_3')]
-    images_to_show = [img for img in images_to_show if img] # Lọc các giá trị None
+    images_to_show = [img for img in images_to_show if img]  # Lọc các giá trị None
     
     if images_to_show:
-        with st.expander(f"📸 Ảnh đính kèm: ({len(images_to_show)} ảnh)", expanded=False):
+        if s3_manager is None:
+            st.info("📸 Có ảnh đính kèm nhưng dịch vụ lưu trữ ảnh hiện không khả dụng.")
+        else:
+            with st.expander(f"📸 Ảnh đính kèm: ({len(images_to_show)} ảnh)", expanded=False):
                 img_cols = st.columns(len(images_to_show))
                 for idx, img_key in enumerate(images_to_show):
                     img_url = s3_manager.get_presigned_url(img_key)
@@ -165,7 +178,7 @@ def ticket_detail_popup(ticket: dict):
     status_options = ['Đang xác nhận', 'Đang xử lý', 'Hoàn thành', 'Đã hủy']
     
     if can_update_progress:
-        # Form cho Admin/IT/duong.bui cập nhật
+        # Form cho Admin/IT cập nhật
         with st.form(key=f"update_form_{ticket['id']}"):
             curr_status_idx = status_options.index(ticket['status']) if ticket['status'] in status_options else 0
             
@@ -193,6 +206,7 @@ def ticket_detail_popup(ticket: dict):
                 
                 if update_maintenance_record(ticket['id'], update_data):
                     st.success("✅ Cập nhật tiến độ thành công!")
+                    clear_ticket_selection()  # FIX #10: Clear selection khi cập nhật xong
                     st.rerun()
     else:
         # View Read-only cho User thường
@@ -202,6 +216,7 @@ def ticket_detail_popup(ticket: dict):
         st.success(ticket['solution_description'] or "IT đang kiểm tra và chưa cập nhật hướng xử lý.")
 
     if st.button("Đóng hộp thoại", width='stretch'):
+        clear_ticket_selection()  # FIX #10: Clear selection khi đóng dialog
         st.rerun()
 
 # ---------- MAIN VIEW ----------
@@ -210,7 +225,8 @@ st.markdown("---")
 
 st.subheader("🔍 Bộ Lọc")
 
-# Trích xuất các giá trị duy nhất từ dữ liệu gốc để làm options cho bộ lọc
+# Trích xuất các giá trị duy nhất từ dữ liệu GỐC để làm options cho bộ lọc
+# (Dùng records gốc cho filter options là đúng — đảm bảo luôn hiển thị đầy đủ lựa chọn)
 all_status = sorted(list(set([r['status'] for r in records if r['status']])))
 all_priorities = sorted(list(set([r['priority'] for r in records if r['priority']])))
 all_requesters = sorted(list(set([r['requester_name'] for r in records if r['requester_name']])))
@@ -221,12 +237,11 @@ with col_f1:
 with col_f2: 
     st.multiselect("Độ ưu tiên", options=all_priorities, key="mt_filter_priority")
 with col_f3: 
-    # Nếu là user thường, dropdown này chỉ có tên của họ. Nếu là Admin, sẽ có tên toàn bộ nv đã tạo phiếu.
     st.multiselect("Người yêu cầu", options=all_requesters, key="mt_filter_requester")
 with col_f4:
     st.button("🔄 Xóa bộ lọc", width='stretch', on_click=clear_mt_filters)
 
-# --- 2. ÁP DỤNG LOGIC LỌC DỮ LIỆU ---
+# --- ÁP DỤNG LOGIC LỌC DỮ LIỆU ---
 filtered_records = records.copy()
 
 if st.session_state.mt_filter_status: 
@@ -240,20 +255,28 @@ if st.session_state.mt_filter_requester:
 
 st.markdown("---")
 
+# ---------- FIX #2: Hiển thị số lượng filtered_records thay vì records ----------
 col_title, col_btn = st.columns([8.5, 1.5], vertical_alignment="bottom")
 with col_title:
-    st.subheader(f"📋 Danh sách phiếu yêu cầu ({len(records)} phiếu)")
+    # Hiển thị tổng + đã lọc nếu đang có filter active
+    if len(filtered_records) != len(records):
+        st.subheader(f"📋 Danh sách phiếu yêu cầu ({len(filtered_records)} / {len(records)} phiếu)")
+    else:
+        st.subheader(f"📋 Danh sách phiếu yêu cầu ({len(records)} phiếu)")
 with col_btn:
     if st.button("➕ Báo Cáo Sự Cố", type="primary", width='stretch'):
         create_ticket_popup()
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Hiển thị Bảng dữ liệu bằng Native DataFrame (Tối ưu chống Lag)
-if not records:
-    st.info("Chưa có phiếu yêu cầu bảo hành / sửa chữa nào.")
+# ---------- FIX #2: Dùng filtered_records cho bảng hiển thị ----------
+if not filtered_records:
+    if records:
+        st.info("Không có phiếu nào khớp với bộ lọc hiện tại. Hãy thử thay đổi bộ lọc.")
+    else:
+        st.info("Chưa có phiếu yêu cầu bảo hành / sửa chữa nào.")
 else:
-    df = pd.DataFrame(records)
+    df = pd.DataFrame(filtered_records)
     
     # Enrich data cho DataFrame
     df['Thiết bị'] = df['device_code'] + " - " + df['device_name']
@@ -273,19 +296,24 @@ else:
         key=f"ticket_table_{st.session_state.ticket_df_key}"
     )
 
-    # Hiển thị Thanh công cụ (Action Toolbar) khi click chọn 1 dòng
+    # ---------- FIX #3: Lấy ticket từ filtered_records thay vì records ----------
+    # Khi bảng hiển thị filtered_records, index click trả về vị trí trong filtered_records.
+    # Phải dùng đúng filtered_records[selected_idx] để lấy đúng bản ghi.
     selected_rows = selection.selection.rows
     if selected_rows:
         selected_idx = selected_rows[0]
-        selected_ticket = records[selected_idx]
         
-        st.markdown("---")
-        c1, c2, c3 = st.columns([6, 2, 2], vertical_alignment="center")
-        with c1:
-            st.markdown(f"🛠️ **Thao tác với phiếu:** `#{selected_ticket['id']} - {selected_ticket['title']}`")
-        with c2:
-            btn_label = "👁️ Cập Nhật Tiến Độ" if can_update_progress else "👁️ Xem Chi Tiết"
-            if st.button(btn_label, type="primary", width='stretch'):
-                ticket_detail_popup(selected_ticket)
-        with c3:
-            st.button("❌ Bỏ chọn", width='stretch', on_click=clear_ticket_selection)
+        # Kiểm tra index hợp lệ để tránh IndexError
+        if selected_idx < len(filtered_records):
+            selected_ticket = filtered_records[selected_idx]
+            
+            st.markdown("---")
+            c1, c2, c3 = st.columns([6, 2, 2], vertical_alignment="center")
+            with c1:
+                st.markdown(f"🛠️ **Thao tác với phiếu:** `#{selected_ticket['id']} - {selected_ticket['title']}`")
+            with c2:
+                btn_label = "👁️ Cập Nhật Tiến Độ" if can_update_progress else "👁️ Xem Chi Tiết"
+                if st.button(btn_label, type="primary", width='stretch'):
+                    ticket_detail_popup(selected_ticket)
+            with c3:
+                st.button("❌ Bỏ chọn", width='stretch', on_click=clear_ticket_selection)
