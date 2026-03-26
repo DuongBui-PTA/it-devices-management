@@ -103,7 +103,7 @@ def main_app():
                 dept_name = emp['department_name'] if emp and emp.get('department_name') else "Khác"
                 alloc_type = "Cá nhân"
             elif alloc.get('department_id'):
-                user_name = "🏢 Dùng chung"
+                user_name = alloc.get('department_name', "Unknown")
                 dept_name = alloc.get('department_name', "Unknown")
                 alloc_type = "Phòng ban"
 

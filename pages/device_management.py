@@ -91,7 +91,7 @@ for d in raw_devices:
             dept_name = emp['department_name'] if emp and emp.get('department_name') else "—"
         elif alloc.get('department_id'):
             # CẤP PHÁT CHO PHÒNG BAN
-            user_name = "🏢 Dùng chung"
+            user_name = alloc['department_name']
             dept_name = alloc['department_name']
         else:
             user_name = "—"
